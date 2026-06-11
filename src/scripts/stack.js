@@ -30,6 +30,38 @@ const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 const CATEGORY_ORDER = ['CMS & Site Builder', 'Framework', 'Hosting & CDN', 'Backend', 'Analytics & Marketing'];
 
 const CHECK_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+const WARN_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>';
+const ERR_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>';
+const KIND_SVG = { ok: CHECK_SVG, warn: WARN_SVG, err: ERR_SVG };
+
+function fmtDate(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d)) return null;
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+function domainSection(dom) {
+  if (!dom) return '';
+  const cards = [];
+  if (dom.created) {
+    const years = Math.floor((Date.now() - new Date(dom.created)) / 31557600000);
+    cards.push({ k: 'ok', t: `Registered ${fmtDate(dom.created)}`, m: years >= 1 ? `The domain is about ${years} year${years > 1 ? 's' : ''} old.` : 'Registered less than a year ago.' });
+  }
+  if (dom.expires) {
+    const days = Math.ceil((new Date(dom.expires) - Date.now()) / 86400000);
+    if (days <= 30) cards.push({ k: 'err', t: `Expires ${fmtDate(dom.expires)}`, m: `Only ${days} day${days === 1 ? '' : 's'} left. If this lapses, the site and its email go down with it. Renew now.` });
+    else if (days <= 60) cards.push({ k: 'warn', t: `Expires ${fmtDate(dom.expires)}`, m: `${days} days out. Worth confirming auto-renew is on and the payment card is current.` });
+    else cards.push({ k: 'ok', t: `Expires ${fmtDate(dom.expires)}`, m: `${days} days of runway on the registration.` });
+  }
+  if (dom.registrar) {
+    cards.push({ k: 'ok', t: `Registrar: ${dom.registrar}`, m: 'Whoever holds the registrar account controls the domain. Make sure that account belongs to the business.' });
+  }
+  if (!cards.length) return '';
+  return `<div class="dsec"><div class="dsec-h">Domain</div>${cards.map((c) =>
+    `<div class="check check--${c.k}"><span class="check-ic">${KIND_SVG[c.k]}</span><div class="check-body"><div class="check-t">${esc(c.t)}</div><div class="check-m">${esc(c.m)}</div></div></div>`
+  ).join('')}</div>`;
+}
 
 function detCard(d) {
   const ver = d.version ? ` <span class="ver">v${esc(d.version)}</span>` : '';
@@ -88,6 +120,7 @@ async function run() {
         html += `<div class="dsec"><div class="dsec-h">${esc(cat)}</div>${items.map(detCard).join('')}</div>`;
       }
     }
+    html += domainSection(d.domain);
     $('#results').innerHTML = html;
   } catch (e) {
     $('#results').innerHTML = note('err', 'Could not reach the scanner. If you are running locally without Netlify, the scan function is unavailable.');

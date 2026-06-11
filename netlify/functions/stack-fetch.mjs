@@ -195,5 +195,41 @@ export const handler = async (event) => {
   let html = '';
   try { html = (await resp.text()).slice(0, MAX_BYTES); } catch { html = ''; }
 
-  return json(200, { url: current, status: resp.status, detections: detect(html, headers, current) });
+  const domain = await rdapLookup(new URL(current).hostname, controller.signal).catch(() => null);
+
+  return json(200, { url: current, status: resp.status, detections: detect(html, headers, current), domain });
 };
+
+/* ---------- domain registration (RDAP, the WHOIS successor) ---------- */
+async function rdapLookup(hostname, signal) {
+  const h = hostname.replace(/^www\./, '');
+  // Try the full hostname first, then the registrable-looking tail, since
+  // RDAP only answers for registered domains, not subdomains.
+  const labels = h.split('.');
+  const tries = [h];
+  if (labels.length > 2) tries.push(labels.slice(-2).join('.'), labels.slice(-3).join('.'));
+  for (const name of [...new Set(tries)]) {
+    try {
+      const r = await fetch(`https://rdap.org/domain/${encodeURIComponent(name)}`, {
+        signal,
+        headers: { accept: 'application/rdap+json, application/json' },
+      });
+      if (!r.ok) continue;
+      const d = await r.json();
+      const ev = (action) => {
+        const e = (d.events || []).find((x) => x.eventAction === action);
+        return e ? e.eventDate : null;
+      };
+      let registrar = null;
+      for (const ent of d.entities || []) {
+        if ((ent.roles || []).includes('registrar')) {
+          const fn = (ent.vcardArray && ent.vcardArray[1] || []).find((v) => v[0] === 'fn');
+          registrar = fn ? fn[3] : ent.handle || null;
+          break;
+        }
+      }
+      return { name: d.ldhName ? d.ldhName.toLowerCase() : name, registrar, created: ev('registration'), expires: ev('expiration'), updated: ev('last changed') };
+    } catch (e) { /* try next */ }
+  }
+  return null;
+}
