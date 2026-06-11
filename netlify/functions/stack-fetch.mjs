@@ -195,10 +195,38 @@ export const handler = async (event) => {
   let html = '';
   try { html = (await resp.text()).slice(0, MAX_BYTES); } catch { html = ''; }
 
-  const domain = await rdapLookup(new URL(current).hostname, controller.signal).catch(() => null);
+  const host = new URL(current).hostname;
+  const [domain, dr] = await Promise.all([
+    rdapLookup(host, controller.signal).catch(() => null),
+    domainRating(host).catch(() => null),
+  ]);
 
-  return json(200, { url: current, status: resp.status, detections: detect(html, headers, current), domain });
+  return json(200, { url: current, status: resp.status, detections: detect(html, headers, current), domain, dr });
 };
+
+/* ---------- Ahrefs Domain Rating (free, no key) ---------- */
+// Proxied server-side so the browser dodges CORS. Attribution is required and
+// is rendered client-side; the license URL comes back in the payload.
+async function domainRating(hostname) {
+  const target = hostname.replace(/^www\./, '');
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 7000);
+  try {
+    const r = await fetch(
+      `https://api.ahrefs.com/v3/public/domain-rating-free?target=${encodeURIComponent(target)}&output=json`,
+      { signal: ac.signal, headers: { accept: 'application/json' } }
+    );
+    if (!r.ok) return null;
+    const d = await r.json();
+    const v = d && d.domain_rating && d.domain_rating.domain_rating;
+    if (typeof v !== 'number') return null;
+    return { value: Math.round(v * 10) / 10, license: (d.domain_rating && d.domain_rating.license) || null };
+  } catch (e) {
+    return null;
+  } finally {
+    clearTimeout(t);
+  }
+}
 
 /* ---------- domain registration (RDAP, the WHOIS successor) ---------- */
 async function rdapLookup(hostname, signal) {

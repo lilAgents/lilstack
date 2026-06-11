@@ -41,25 +41,31 @@ function fmtDate(iso) {
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
-function domainSection(dom) {
-  if (!dom) return '';
+function domainSection(dom, dr) {
   const cards = [];
-  if (dom.created) {
+  if (dr && typeof dr.value === 'number') {
+    const tier = dr.value >= 60 ? 'strong' : dr.value >= 30 ? 'moderate' : 'modest';
+    const lic = dr.license
+      ? `<a href="${esc(dr.license)}" target="_blank">Domain Rating by Ahrefs</a>`
+      : 'Domain Rating by Ahrefs';
+    cards.push({ k: 'ok', t: `Domain Rating: ${dr.value} / 100`, html: `Ahrefs scores backlink authority on a 0 to 100 logarithmic scale, so this site sits in the ${tier} range. Source: ${lic}.` });
+  }
+  if (dom && dom.created) {
     const years = Math.floor((Date.now() - new Date(dom.created)) / 31557600000);
     cards.push({ k: 'ok', t: `Registered ${fmtDate(dom.created)}`, m: years >= 1 ? `The domain is about ${years} year${years > 1 ? 's' : ''} old.` : 'Registered less than a year ago.' });
   }
-  if (dom.expires) {
+  if (dom && dom.expires) {
     const days = Math.ceil((new Date(dom.expires) - Date.now()) / 86400000);
     if (days <= 30) cards.push({ k: 'err', t: `Expires ${fmtDate(dom.expires)}`, m: `Only ${days} day${days === 1 ? '' : 's'} left. If this lapses, the site and its email go down with it. Renew now.` });
     else if (days <= 60) cards.push({ k: 'warn', t: `Expires ${fmtDate(dom.expires)}`, m: `${days} days out. Worth confirming auto-renew is on and the payment card is current.` });
     else cards.push({ k: 'ok', t: `Expires ${fmtDate(dom.expires)}`, m: `${days} days of runway on the registration.` });
   }
-  if (dom.registrar) {
+  if (dom && dom.registrar) {
     cards.push({ k: 'ok', t: `Registrar: ${dom.registrar}`, m: 'Whoever holds the registrar account controls the domain. Make sure that account belongs to the business.' });
   }
   if (!cards.length) return '';
   return `<div class="dsec"><div class="dsec-h">Domain</div>${cards.map((c) =>
-    `<div class="check check--${c.k}"><span class="check-ic">${KIND_SVG[c.k]}</span><div class="check-body"><div class="check-t">${esc(c.t)}</div><div class="check-m">${esc(c.m)}</div></div></div>`
+    `<div class="check check--${c.k}"><span class="check-ic">${KIND_SVG[c.k]}</span><div class="check-body"><div class="check-t">${esc(c.t)}</div><div class="check-m">${c.html ? c.html : esc(c.m)}</div></div></div>`
   ).join('')}</div>`;
 }
 
@@ -120,7 +126,7 @@ async function run() {
         html += `<div class="dsec"><div class="dsec-h">${esc(cat)}</div>${items.map(detCard).join('')}</div>`;
       }
     }
-    html += domainSection(d.domain);
+    html += domainSection(d.domain, d.dr);
     $('#results').innerHTML = html;
   } catch (e) {
     $('#results').innerHTML = note('err', 'Could not reach the scanner. If you are running locally without Netlify, the scan function is unavailable.');
