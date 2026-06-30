@@ -34,10 +34,35 @@ const json = (statusCode, obj) => ({
 function detect(html, headers, finalUrl) {
   const h = (name) => headers[name] || '';
   const found = [];
-  const add = (cat, name, conf, why, version) => found.push({ cat, name, conf, why, version: version || null });
+  const add = (cat, name, conf, why, version, ai) => found.push({ cat, name, conf, why, version: version || null, ai: ai || false });
 
   const gen = (html.match(/<meta[^>]+name=["']generator["'][^>]+content=["']([^"']+)["']/i) ||
     html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']generator["']/i) || [])[1] || '';
+
+  /* ----- AI website builders ----- */
+  // Prompt-to-site generators. Tool-specific asset/host fingerprints get ai:true;
+  // softer or shared-host signals get 'likely'/'maybe' so the UI hedges instead of
+  // overclaiming on a hand-built site that merely shares the same host.
+  const url = finalUrl || '';
+  const hay = html + ' ' + url;
+  if (/cdn\.gpteng\.co|gptengineer\.js|lovableproject\.com|lovable\.app|\/lovable-uploads\//i.test(hay)) {
+    add('AI Website Builder', 'Lovable', 'high', 'Lovable injects the gptengineer.js script and lovable-uploads assets.', null, true);
+  }
+  if (/durable\.co/i.test(hay)) {
+    add('AI Website Builder', 'Durable', 'high', 'Durable AI-builder assets in the page.', null, true);
+  }
+  if (/\bbolt\.new\b|stackblitz\.io|webcontainer[.-]/i.test(hay)) {
+    add('AI Website Builder', 'Bolt (StackBlitz)', 'medium', 'Bolt.new or StackBlitz WebContainer markers.', null, 'likely');
+  }
+  if (/v0\.dev/i.test(html)) {
+    add('AI Website Builder', 'v0 by Vercel', 'medium', 'References v0.dev, Vercel’s prompt-to-UI generator.', null, 'likely');
+  }
+  if (/mixo\.io/i.test(hay)) add('AI Website Builder', 'Mixo', 'medium', 'Mixo AI-builder assets.', null, 'likely');
+  if (/b12\.io/i.test(html)) add('AI Website Builder', 'B12', 'medium', 'B12 AI-builder assets.', null, 'likely');
+  if (/wegic\.ai/i.test(hay)) add('AI Website Builder', 'Wegic', 'medium', 'Wegic AI-builder assets.', null, 'likely');
+  if (/\.repl(?:it)?\.(?:app|dev|co)(?:[\/:]|$)|replit\.com\/@|__replco/i.test(hay)) {
+    add('AI Website Builder', 'Replit', 'medium', 'Hosted on Replit, often built with Replit Agent.', null, 'maybe');
+  }
 
   /* ----- CMS & site builders ----- */
   if (/wp-content\/|wp-includes\/|\/wp-json\//i.test(html) || /wordpress/i.test(gen)) {
@@ -60,7 +85,7 @@ function detect(html, headers, finalUrl) {
   if (/assets(?:-global)?\.website-files\.com|data-wf-(?:domain|site|page)/i.test(html) || /webflow/i.test(gen)) {
     add('CMS & Site Builder', 'Webflow', 'high', 'website-files.com assets or data-wf attributes.');
   }
-  if (/framerusercontent\.com/i.test(html) || /framer/i.test(gen)) add('CMS & Site Builder', 'Framer', 'high', 'Framer user content CDN in the page.');
+  if (/framerusercontent\.com|framer\.(?:app|website|media)/i.test(html) || /framer/i.test(gen) || /\.framer\.(?:app|website)\b/i.test(finalUrl || '')) add('CMS & Site Builder', 'Framer', 'high', 'Framer user-content CDN or a framer.app/website host.');
   if (/ghost/i.test(gen) || /\/ghost\/assets\/|ghost-sdk/i.test(html)) {
     add('CMS & Site Builder', 'Ghost', 'high', /ghost/i.test(gen) ? 'Meta generator says Ghost.' : 'Ghost asset paths.', (gen.match(/Ghost\s+([\d.]+)/i) || [])[1]);
   }

@@ -27,7 +27,7 @@ function initTheme() {
 /* ---------- render ---------- */
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-const CATEGORY_ORDER = ['CMS & Site Builder', 'Framework', 'Hosting & CDN', 'Backend', 'Analytics & Marketing'];
+const CATEGORY_ORDER = ['AI Website Builder', 'CMS & Site Builder', 'Framework', 'Hosting & CDN', 'Backend', 'Analytics & Marketing'];
 
 const CHECK_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
 const WARN_SVG = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>';
@@ -71,11 +71,17 @@ function domainSection(dom, dr) {
 
 function detCard(d) {
   const ver = d.version ? ` <span class="ver">v${esc(d.version)}</span>` : '';
-  const conf = d.conf === 'high' ? '' : '<span class="conf">likely</span>';
-  return `<div class="check check--ok">
-    <span class="check-ic">${CHECK_SVG}</span>
+  let badge = '';
+  if (d.ai === true) badge = '<span class="ai-badge">AI</span>';
+  else if (d.ai === 'likely') badge = '<span class="ai-badge ai-badge--soft">likely AI</span>';
+  else if (d.ai === 'maybe') badge = ''; // the card name already carries the caveat
+  else if (d.conf !== 'high') badge = '<span class="conf">likely</span>';
+  // The unconfirmed AI signal renders amber so it never reads as a hard verdict.
+  const kind = d.ai === 'maybe' ? 'warn' : 'ok';
+  return `<div class="check check--${kind}">
+    <span class="check-ic">${KIND_SVG[kind]}</span>
     <div class="check-body">
-      <div class="check-t">${esc(d.name)}${ver} ${conf}</div>
+      <div class="check-t">${esc(d.name)}${ver} ${badge}</div>
       <div class="check-m">${esc(d.why)}</div>
     </div>
   </div>`;
@@ -86,9 +92,15 @@ function note(kind, msg) {
 }
 
 function headline(domain, dets) {
+  const ai = dets.find((d) => d.cat === 'AI Website Builder' && (d.ai === true || d.ai === 'likely'));
   const cms = dets.find((d) => d.cat === 'CMS & Site Builder');
   const fw = dets.find((d) => d.cat === 'Framework');
   const host = dets.find((d) => d.cat === 'Hosting & CDN');
+  if (ai) {
+    const verb = ai.ai === 'likely' ? 'looks built with' : 'was built with';
+    const tail = host && !ai.name.includes(host.name) ? `, served via ${host.name}` : '';
+    return `${domain} ${verb} ${ai.name}, an AI website builder${tail}.`;
+  }
   const main = cms ? cms.name : fw ? fw.name : null;
   if (main && host) return `${domain} runs on ${main}, hosted via ${host.name}.`;
   if (main) return `${domain} runs on ${main}.`;
